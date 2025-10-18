@@ -20,10 +20,19 @@ tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 try:
     nlp = spacy.load('es_core_news_sm')
 except OSError:
-    st.error("Error: No se pudo cargar el modelo de lenguaje español. Ejecutando descarga...")
-    import subprocess
-    subprocess.run(["python", "-m", "spacy", "download", "es_core_news_sm"])
-    nlp = spacy.load('es_core_news_sm')
+    st.error("Error: No se pudo cargar el modelo de lenguaje español. Intentando descarga automática...")
+    try:
+        import subprocess
+        result = subprocess.run(["python", "-m", "spacy", "download", "es_core_news_sm"], capture_output=True, text=True)
+        if result.returncode == 0:
+            nlp = spacy.load('es_core_news_sm')
+            st.success("Modelo descargado exitosamente.")
+        else:
+            st.error("Error en la descarga del modelo. Usando modelo básico.")
+            nlp = spacy.blank('es')  # Modelo básico como fallback
+    except Exception as e:
+        st.error(f"Error crítico: {e}. Usando modelo básico.")
+        nlp = spacy.blank('es')  # Modelo básico como fallback
 
 # Función para buscar en Google (con manejo de rate limiting)
 def buscar_en_google(query, num_results=3):
@@ -110,9 +119,15 @@ def extraer_texto(url):
 
 # Función para procesar síntomas con NLP
 def procesar_sintomas(descripcion):
-    doc = nlp(descripcion)
-    sintomas = [token.lemma_ for token in doc if token.pos_ in ['NOUN', 'ADJ'] and not token.is_stop]
-    return sintomas
+    try:
+        doc = nlp(descripcion)
+        sintomas = [token.lemma_ for token in doc if token.pos_ in ['NOUN', 'ADJ'] and not token.is_stop]
+        return sintomas
+    except Exception as e:
+        # Fallback básico si NLP falla
+        palabras = descripcion.lower().split()
+        sintomas_basicos = [palabra.strip('.,!?') for palabra in palabras if len(palabra) > 3]
+        return sintomas_basicos[:10]  # Limitar a 10 palabras
 
 # Función para generar diagnóstico basado en búsqueda (método alternativo)
 def generar_diagnostico_tradicional(sintomas):
