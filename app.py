@@ -7,10 +7,14 @@ import re
 import google.generativeai as genai
 import os
 from tavily import TavilyClient
+from dotenv import load_dotenv
 
-# Configurar APIs
-genai.configure(api_key="AIzaSyAdYlV8Mo64GufUGFno4bJh9KE5sIY-rNA")
-tavily_client = TavilyClient(api_key="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")
+# Cargar variables de entorno
+load_dotenv()
+
+# Configurar APIs desde variables de entorno
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 
 # Cargar modelo de spaCy para español
 nlp = spacy.load('es_core_news_sm')
