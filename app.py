@@ -16,23 +16,40 @@ load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 
-# Cargar modelo de spaCy para español (con manejo de errores)
+# Cargar modelo de spaCy para español (con manejo de errores mejorado)
+nlp = None
+modelo_cargado = False
+
 try:
     nlp = spacy.load('es_core_news_sm')
+    modelo_cargado = True
 except OSError:
-    st.error("Error: No se pudo cargar el modelo de lenguaje español. Intentando descarga automática...")
+    st.warning("Modelo de spaCy no encontrado. Intentando alternativas...")
+
+    # Intentar descargar el modelo
     try:
         import subprocess
-        result = subprocess.run(["python", "-m", "spacy", "download", "es_core_news_sm"], capture_output=True, text=True)
+        st.info("Descargando modelo de spaCy...")
+        result = subprocess.run(["python", "-m", "spacy", "download", "es_core_news_sm"],
+                              capture_output=True, text=True, timeout=300)
         if result.returncode == 0:
             nlp = spacy.load('es_core_news_sm')
+            modelo_cargado = True
             st.success("Modelo descargado exitosamente.")
         else:
-            st.error("Error en la descarga del modelo. Usando modelo básico.")
-            nlp = spacy.blank('es')  # Modelo básico como fallback
+            st.warning("Descarga fallida. Usando modelo básico.")
+            nlp = spacy.blank('es')
+    except subprocess.TimeoutExpired:
+        st.warning("Descarga tomó demasiado tiempo. Usando modelo básico.")
+        nlp = spacy.blank('es')
     except Exception as e:
-        st.error(f"Error crítico: {e}. Usando modelo básico.")
-        nlp = spacy.blank('es')  # Modelo básico como fallback
+        st.warning(f"Error en descarga: {e}. Usando modelo básico.")
+        nlp = spacy.blank('es')
+
+# Verificar que nlp esté disponible
+if nlp is None:
+    st.error("Error crítico: No se pudo inicializar spaCy.")
+    nlp = spacy.blank('es')  # Último recurso
 
 # Función para buscar en Google (con manejo de rate limiting)
 def buscar_en_google(query, num_results=3):
@@ -120,14 +137,19 @@ def extraer_texto(url):
 # Función para procesar síntomas con NLP
 def procesar_sintomas(descripcion):
     try:
-        doc = nlp(descripcion)
-        sintomas = [token.lemma_ for token in doc if token.pos_ in ['NOUN', 'ADJ'] and not token.is_stop]
-        return sintomas
+        if modelo_cargado and nlp is not None:
+            doc = nlp(descripcion)
+            sintomas = [token.lemma_ for token in doc if token.pos_ in ['NOUN', 'ADJ'] and not token.is_stop]
+            return sintomas
+        else:
+            # Fallback básico si NLP no está disponible
+            palabras = descripcion.lower().split()
+            sintomas_basicos = [palabra.strip('.,!?') for palabra in palabras if len(palabra) > 3]
+            return sintomas_basicos[:10]  # Limitar a 10 palabras
     except Exception as e:
-        # Fallback básico si NLP falla
+        # Último recurso: procesamiento muy básico
         palabras = descripcion.lower().split()
-        sintomas_basicos = [palabra.strip('.,!?') for palabra in palabras if len(palabra) > 3]
-        return sintomas_basicos[:10]  # Limitar a 10 palabras
+        return [palabra.strip('.,!?') for palabra in palabras if len(palabra) > 2][:8]
 
 # Función para generar diagnóstico basado en búsqueda (método alternativo)
 def generar_diagnostico_tradicional(sintomas):
@@ -184,11 +206,14 @@ if st.button("Analizar", key="analizar_button"):
                     diagnostico_ai = generar_diagnostico_ai(sintomas, descripcion)
                     st.subheader("Diagnóstico generado por IA:")
                     st.markdown(diagnostico_ai)
-
+    
                     # Recomendaciones con IA
                     medicamentos_ai = recomendar_medicamentos_ai(diagnostico_ai.split('\n')[0], sintomas)
                     st.subheader("Recomendaciones de medicamentos (IA):")
                     st.markdown(medicamentos_ai)
+    
+                    if not modelo_cargado:
+                        st.info("💡 Nota: El procesamiento de síntomas se realizó con análisis básico debido a limitaciones del modelo de lenguaje.")
 
                 else:
                     # Método tradicional
