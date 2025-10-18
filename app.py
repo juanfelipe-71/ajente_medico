@@ -16,8 +16,14 @@ load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 
-# Cargar modelo de spaCy para español
-nlp = spacy.load('es_core_news_sm')
+# Cargar modelo de spaCy para español (con manejo de errores)
+try:
+    nlp = spacy.load('es_core_news_sm')
+except OSError:
+    st.error("Error: No se pudo cargar el modelo de lenguaje español. Ejecutando descarga...")
+    import subprocess
+    subprocess.run(["python", "-m", "spacy", "download", "es_core_news_sm"])
+    nlp = spacy.load('es_core_news_sm')
 
 # Función para buscar en Google (con manejo de rate limiting)
 def buscar_en_google(query, num_results=3):
