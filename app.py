@@ -16,7 +16,7 @@ load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 
-# Cargar modelo de spaCy para español (con manejo de errores mejorado)
+# Cargar modelo de spaCy para español (con manejo de errores mejorado - sin mostrar mensajes al usuario)
 nlp = None
 modelo_cargado = False
 
@@ -24,31 +24,23 @@ try:
     nlp = spacy.load('es_core_news_sm')
     modelo_cargado = True
 except OSError:
-    st.warning("Modelo de spaCy no encontrado. Intentando alternativas...")
-
-    # Intentar descargar el modelo
+    # Intentar descargar el modelo silenciosamente
     try:
         import subprocess
-        st.info("Descargando modelo de spaCy...")
         result = subprocess.run(["python", "-m", "spacy", "download", "es_core_news_sm"],
                               capture_output=True, text=True, timeout=300)
         if result.returncode == 0:
             nlp = spacy.load('es_core_news_sm')
             modelo_cargado = True
-            st.success("Modelo descargado exitosamente.")
         else:
-            st.warning("Descarga fallida. Usando modelo básico.")
             nlp = spacy.blank('es')
     except subprocess.TimeoutExpired:
-        st.warning("Descarga tomó demasiado tiempo. Usando modelo básico.")
         nlp = spacy.blank('es')
-    except Exception as e:
-        st.warning(f"Error en descarga: {e}. Usando modelo básico.")
+    except Exception:
         nlp = spacy.blank('es')
 
 # Verificar que nlp esté disponible
 if nlp is None:
-    st.error("Error crítico: No se pudo inicializar spaCy.")
     nlp = spacy.blank('es')  # Último recurso
 
 # Función para buscar en Google (con manejo de rate limiting)
